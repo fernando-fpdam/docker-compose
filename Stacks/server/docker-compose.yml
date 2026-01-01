@@ -1,0 +1,328 @@
+version: "3.3"
+
+# Lista de Puertos:configs:
+#   - 7001:9091 => transmission OK
+#   - 7002:8989 => sonarr       OK
+#   - 7003:9696 => prowlarr     OK
+#   - 7004:5055 => Jellyseerr   OK
+#   - 7005:7878 => Radarr       OK
+#   - 7006:8096 => Jellyfin     OK
+#   - 7007:80   => Nextcloud    OK
+#   - 7008:80   => Vaultwarden  OK
+#   - 7009:5000 => Kavita       OK
+#   - 7010:3033 => yt-dlp       OK
+#   - 7011:8080 => ownCloud     OK
+#   - 7012:8080 => StirlingPDF  OK
+#   - 7013:5006 => ActualBudget OK
+#   - 7014:8000 => LeanTime     OK
+
+services:
+
+
+# Kavita
+  kavita:
+    image: lscr.io/linuxserver/kavita:latest
+    container_name: kavita
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    volumes:
+      - /home/server/configurations/kavita/config:/config
+      - /home/server/nfs/library/bbdd/kavita/data:/data 
+    ports:
+      - 7009:5000
+    restart: unless-stopped
+
+# OwnCloud
+  owncloud:
+    image: owncloud/server:10.15
+    container_name: owncloud
+    restart: unless-stopped
+    ports:
+      - "7011:8080"
+    depends_on:
+      - db
+      - redis
+    environment:
+      - OWNCLOUD_DOMAIN=192.168.0.152:7011
+      - OWNCLOUD_TRUSTED_DOMAINS=192.168.0.152
+      - OWNCLOUD_DB_TYPE=mysql
+      - OWNCLOUD_DB_NAME=owncloud
+      - OWNCLOUD_DB_USERNAME=owncloud
+      - OWNCLOUD_DB_PASSWORD=owncloud
+      - OWNCLOUD_DB_HOST=db
+      - OWNCLOUD_ADMIN_USERNAME=user
+      - OWNCLOUD_ADMIN_PASSWORD=p4ssw0rd
+      - OWNCLOUD_MYSQL_UTF8MB4=true
+      - OWNCLOUD_REDIS_ENABLED=true
+      - OWNCLOUD_REDIS_HOST=redis
+    volumes:
+      # - /home/server/nfs/library/bbdd/owncloud:/mnt/data
+      - /home/server/nfs/library/bbdd/owncloud/files:/var/www/owncloud/data  # Solo esto en tu NAS
+      # - /home/server/nfs/library/bbdd/owncloud/config:/var/www/owncloud/config
+      # - /home/server/nfs/library/bbdd/owncloud/apps:/var/www/owncloud/apps
+      # - /home/server/nfs/library/bbdd/owncloud/sessions:/var/www/owncloud/sessions
+
+
+
+  db:
+    image: mariadb:latest
+    container_name: own_mariadb
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=owncloud
+      - MYSQL_ROOT_PASSWORD=owncloud
+      - MYSQL_USER=owncloud
+      - MYSQL_PASSWORD=owncloud
+    command: ["--max-allowed-packet=128M", "--innodb-log-file-size=64M"]
+    volumes:
+      - ./mysql:/var/lib/mysql  # Almacenamiento local
+
+  redis:
+    image: redis:latest
+    container_name: own_redis
+    restart: unless-stopped
+    command: ["--databases", "1"]
+    volumes:
+      - ./redis:/data  # Almacenamiento local
+
+
+
+## Mediaserver
+# Transmission
+  transmission-openvpn:
+    image: haugene/transmission-openvpn
+    container_name: transmission
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - /home/server/configurations/arr-stack/transmission/config:/config
+      - /home/server/nfs/library/mediaserver/movies:/data/completed/movies
+      - /home/server/nfs/library/mediaserver/tvseries:/data/completed/tvseries
+    environment:
+      - OPENVPN_PROVIDER=MULLVAD
+      - OPENVPN_CONFIG=nl_all
+      - OPENVPN_USERNAME=4444870268822252
+      - OPENVPN_PASSWORD=""
+      - LOCAL_NETWORK=192.168.0.0/24
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+    ports:
+      - 7001:9091
+    restart: unless-stopped
+    
+# yt-dlp
+  yt-dlp-webui:
+    image: marcobaobao/yt-dlp-webui
+    container_name: yt-dlp
+    ports:
+      - 7010:3033
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    volumes:
+      -  /home/server/configurations/arr-stack/yt-dlp/config:/config
+      - /home/server/nfs/library/mediaserver/music:/downloads/music
+      - /home/server/nfs/library/mediaserver/documentary:/downloads/documentary
+      - /home/server/nfs/library/mediaserver/reels:/downloads/reels
+      - /home/server/nfs/library/mediaserver/podcasts:/downloads/podcasts
+      - /home/server/nfs/library/mediaserver/rugby:/downloads/rugby
+   
+    healthcheck:
+      test: curl -f http://localhost:3033 || exit 1
+    restart: unless-stopped
+# Sonarr
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    ports:
+      - 7002:8989 
+    volumes:
+      - /home/server/configurations/arr-stack/sonarr/config:/config
+      - /home/server/nfs/library/mediaserver/tvseries:/tvseries:rw
+      - /home/server/nfs/library/mediaserver/cartoons:/cartoons:rw
+      
+    restart: unless-stopped
+# Prowlarr
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    ports:
+      - 7003:9696 
+    volumes:
+      - /home/server/configurations/arr-stack/prowlarr/config:/config
+    restart: unless-stopped
+
+# Jellyseerr
+  jellyseerr:
+    image: ghcr.io/fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    
+    environment:
+      - LOG_LEVEL=debug
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    ports:
+      - 7004:5055
+    volumes:
+      - /home/server/configurations/arr-stack/jellyseerr/config:/app/config
+      - /home/server/nfs/library/mediaserver/tvseries:/tvseries
+      - /home/server/nfs/library/mediaserver/movies:/movies
+      - /home/server/nfs/library/mediaserver/music:/music
+    restart: unless-stopped
+
+# Radarr
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    ports:
+      - 7005:7878 
+    volumes:
+      - /home/server/configurations/arr-stack/radarr/config:/config
+      - /home/server/nfs/library/mediaserver/movies:/movies:rw
+    restart: unless-stopped
+
+# Jellyfin
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+      - JELLYFIN_PublishedServerUrl=http://192.168.0.152 #optional
+
+    ports:
+      - 7006:8096
+    volumes:
+      - /home/server/configurations/arr-stack/jellyfin/config:/config
+      - /home/server/nfs/library/mediaserver/tvseries:/data/tvshows
+      - /home/server/nfs/library/mediaserver/movies:/data/movies
+      - /home/server/nfs/library/mediaserver/music:/data/music
+      - /home/server/nfs/library/mediaserver/documentary:/data/documentary
+      - /home/server/nfs/library/mediaserver/reels:/data/reels
+      - /home/server/nfs/library/mediaserver/podcasts:/data/podcasts
+      - /home/server/nfs/library/mediaserver/rugby:/data/rugby
+      - /home/server/nfs/library/mediaserver/cartoons:/data/cartoons
+    restart: unless-stopped
+
+
+# StirlingPDF
+  stirling-pdf:
+    container_name: stirling-pdf
+    restart: unless-stopped
+    image: frooodle/s-pdf:latest
+    ports:
+      - '7012:8080'
+    volumes:
+      #- /ruta/a/trainingData:/usr/share/tesseract-ocr/4.00/tessdata #Required for extra OCR languages
+      - /home/server/configurations/stirling-PDF:/configs
+      - /home/server/PDFs:/customFiles/
+    environment:
+      - DOCKER_ENABLE_SECURITY=false
+
+# ActualBudget
+  actual_server:
+    container_name: actual_budget
+    image: docker.io/actualbudget/actual-server:latest
+    ports:
+      - '7013:5006'
+    volumes:
+      - ./actual-data:/data
+    healthcheck:
+      # Enable health check for the instance
+      test: ['CMD-SHELL', 'node src/scripts/health-check.js']
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+
+# LeanTime
+  leantime_db:
+
+    image: mysql:8.4
+    container_name: mysql_leantime
+    volumes:
+      - db_data_leantime:/var/lib/mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass123        # cámbialo por uno seguro
+      MYSQL_DATABASE: leantime
+      MYSQL_USER: leantime
+      MYSQL_PASSWORD: leantimepass123         # cámbialo también
+    networks:
+      - leantime-net
+    command: --character-set-server=UTF8MB4 --collation-server=UTF8MB4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass123"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  leantime:
+    container_name: leantime
+    image: leantime/leantime:latest
+    restart: unless-stopped
+    environment:
+      LEAN_DB_HOST: leantime_db
+      LEAN_DB_USER: leantime
+      LEAN_DB_PASSWORD: leantimepass123
+      LEAN_DB_DATABASE: leantime
+      LEAN_DB_DRIVER: mysql
+    security_opt:
+      - no-new-privileges:true
+    cap_add:
+      - CAP_CHOWN
+      - CAP_SETGID
+      - CAP_SETUID
+    ports:
+      - "7014:8080"
+    networks:
+      - leantime-net
+    volumes:
+      - public_userfiles:/var/www/html/public/userfiles
+      - userfiles:/var/www/html/userfiles
+      - plugins:/var/www/html/app/Plugins
+      - logs:/var/www/html/storage/logs
+    depends_on:
+      leantime_db:
+        condition: service_healthy
+
+  mysql_helper:
+    image: mysql:8.4
+    command: chown -R mysql:mysql /var/lib/mysql
+    volumes:
+      - db_data_leantime:/var/lib/mysql
+    user: root
+    profiles: [ "helper" ]
+
+volumes:
+  db_data_leantime:
+  userfiles:
+  public_userfiles:
+  plugins:
+  logs:
+
+networks:
+  leantime-net:

@@ -1,0 +1,30 @@
+version: "3"
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    environment:
+     - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
+     - WEBSOCKET_ENABLED=true
+     - SIGNUPS_ALLOWED=false
+     - DISABLE_2FA_REMEMBER=true
+     - EMAIL_2FA_AUTO_FALLBACK=false
+     - EMAIL_2FA_ENFORCE_ON_VERIFIED_INVITE=true
+     - SHOW_PASSWORD_HINT=false
+     - PASSWORD_ITERATIONS=600000
+     - DOMAIN=https://passlocal.duckdns.org
+
+     - HTTP_REQUEST_BLOCK_NON_GLOBAL_IPS=true
+     - SMTP_HOST=${SMTP_HOST}
+     - SMTP_FROM=${SMTP_FROM}
+     - SMTP_PORT=${SMTP_PORT}
+     - SMTP_SECURITY=${SMTP_SECURITY}
+     - SMTP_TIMEOUT=${SMTP_TIMEOUT}
+     - SMTP_USERNAME=${SMTP_USERNAME}
+     - SMTP_PASSWORD=${SMTP_PASSWORD}
+     - SMTP_FROM_NAME=${SMTP_FROM_NAME}
+    volumes:
+      - /home/server/configurations/vaultwarden/data:/data/:rw
+    ports:
+      - 7008:80
+    restart: unless-stopped
